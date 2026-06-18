@@ -6,7 +6,7 @@ import random
 import numpy as np 
 import time
 
-import gym
+import gymnasium as gym
 
 from wrappers import *
 from memory import ReplayMemory
@@ -54,7 +54,7 @@ def optimize_model():
 
     non_final_mask = torch.tensor(
         tuple(map(lambda s: s is not None, batch.next_state)),
-        device=device, dtype=torch.uint8)
+        device=device, dtype=torch.bool)
     
     non_final_next_states = torch.cat([s for s in batch.next_state
                                        if s is not None]).to('cuda')
@@ -86,7 +86,7 @@ def get_state(obs):
 
 def train(env, n_episodes, render=False):
     for episode in range(n_episodes):
-        obs = env.reset()
+        obs, info = env.reset()
         state = get_state(obs)
         total_reward = 0.0
         for t in count():
@@ -95,7 +95,8 @@ def train(env, n_episodes, render=False):
             if render:
                 env.render()
 
-            obs, reward, done, info = env.step(action)
+            obs, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
 
             total_reward += reward
 
@@ -123,9 +124,9 @@ def train(env, n_episodes, render=False):
     return
 
 def test(env, n_episodes, policy, render=True):
-    env = gym.wrappers.Monitor(env, './videos/' + 'dqn_pong_video')
+    env = gym.wrappers.RecordVideo(env, './videos/dqn_pong_video')
     for episode in range(n_episodes):
-        obs = env.reset()
+        obs, info = env.reset()
         state = get_state(obs)
         total_reward = 0.0
         for t in count():
@@ -135,7 +136,8 @@ def test(env, n_episodes, policy, render=True):
                 env.render()
                 time.sleep(0.02)
 
-            obs, reward, done, info = env.step(action)
+            obs, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
 
             total_reward += reward
 
@@ -180,7 +182,7 @@ if __name__ == '__main__':
     steps_done = 0
 
     # create environment
-    env = gym.make("PongNoFrameskip-v4")
+    env = gym.make("ALE/Pong-v5")
     env = make_env(env)
 
     # initialize replay memory
@@ -189,6 +191,7 @@ if __name__ == '__main__':
     # train model
     train(env, 400)
     torch.save(policy_net, "dqn_pong_model")
-    policy_net = torch.load("dqn_pong_model")
-    test(env, 1, policy_net, render=False)
+    policy_net = torch.load("dqn_pong_model", weights_only=False)
+    test_env = make_env(gym.make("ALE/Pong-v5", render_mode="rgb_array"))
+    test(test_env, 1, policy_net, render=False)
 
