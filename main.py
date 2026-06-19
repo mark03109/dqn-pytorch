@@ -91,35 +91,43 @@ def train(env, n_episodes, render=False):
         total_reward = 0.0
         for t in count():
             action = select_action(state)
-
             if render:
                 env.render()
-
             obs, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
-
             total_reward += reward
-
             if not done:
                 next_state = get_state(obs)
             else:
                 next_state = None
-
             reward = torch.tensor([reward], device=device)
-
             memory.push(state, action.to('cpu'), next_state, reward.to('cpu'))
             state = next_state
-
             if steps_done > INITIAL_MEMORY:
                 optimize_model()
-
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
-
             if done:
                 break
         if episode % 20 == 0:
-                print('Total steps: {} \t Episode: {}/{} \t Total reward: {}'.format(steps_done, episode, t, total_reward))
+            print('Total steps: {} \t Episode: {}/{} \t Total reward: {}'.format(steps_done, episode, t, total_reward))
+        if episode % 60 == 0:
+            rec_env = gym.wrappers.RecordVideo(
+                make_env(gym.make("ALE/Pong-v5", render_mode="rgb_array")),
+                './videos/dqn_pong_video',
+                episode_trigger=lambda ep: ep == 0,
+                name_prefix=f'train-episode-{episode}'
+            )
+            obs_r, info_r = rec_env.reset()
+            s_r = get_state(obs_r)
+            for _ in count():
+                with torch.no_grad():
+                    a_r = policy_net(s_r.to('cuda')).max(1)[1].view(1, 1)
+                obs_r, _, term_r, trunc_r, _ = rec_env.step(a_r)
+                if term_r or trunc_r:
+                    break
+                s_r = get_state(obs_r)
+            rec_env.close()
     env.close()
     return
 
@@ -189,7 +197,7 @@ if __name__ == '__main__':
     memory = ReplayMemory(MEMORY_SIZE)
     
     # train model
-    train(env, 400)
+    train(env, 20000)
     torch.save(policy_net, "dqn_pong_model")
     policy_net = torch.load("dqn_pong_model", weights_only=False)
     test_env = make_env(gym.make("ALE/Pong-v5", render_mode="rgb_array"))

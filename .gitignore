@@ -1,1 +1,4 @@
 .vscode
+*.pyc
+videos
+__pycache__
